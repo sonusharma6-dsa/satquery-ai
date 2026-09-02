@@ -37,6 +37,17 @@ if uploads:
             image_records.append(asset)
             with columns[index % 2]:
                 st.image(preview_rgb(asset["array"]), caption=f"{upload.name} | {asset['bands']} band(s)", use_container_width=True)
+                asset["modality"] = st.selectbox(
+                    "Modality",
+                    ["unknown", "optical", "sar"],
+                    key=f"modality_{index}",
+                    help="Choose SAR for radar imagery and optical for multispectral/RGB imagery.",
+                )
+                asset["registered"] = len(uploads) == 1 or st.checkbox(
+                    "Pair is co-registered",
+                    key=f"registered_{index}",
+                    help="Confirm that this image is spatially aligned with the other uploaded image.",
+                )
 
         if st.button("Analyze", type="primary", use_container_width=True):
             if not query.strip():
@@ -57,7 +68,7 @@ if uploads:
                 st.metric("Tasks executed", len(result["plan"].tasks))
 
             st.subheader("Execution summary")
-            st.json({"tasks": result["plan"].tasks, "intent": result["plan"].intent, "parameters": result["plan"].parameters, "tools": [item.task for item in result["results"]]})
+            st.json({"tasks": result["plan"].tasks, "intent": result["plan"].intent, "modality": result["plan"].modality, "parameters": result["plan"].parameters, "tools": [item.task for item in result["results"]], "model_metadata": [item.metadata for item in result["results"]]})
             st.subheader("Visual evidence")
             evidence_images = [item.metadata.get("evidence") for item in result["results"] if item.metadata.get("evidence", "").endswith(".png")]
             if evidence_images:

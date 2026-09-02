@@ -40,10 +40,18 @@ def validate(plan: AnalysisPlan, images: list[dict]) -> None:
         first, second = images
         if (first["width"], first["height"]) != (second["width"], second["height"]):
             raise ValueError("The pair must have matching width and height.")
+        if plan.modality == "optical_sar" and {image.get("modality") for image in images} != {"optical", "sar"}:
+            raise ValueError("Optical-SAR analysis requires one optical image and one SAR image.")
+        if plan.modality == "bi_temporal" and not all(image.get("registered") for image in images):
+            raise ValueError("Bi-temporal analysis requires co-registration confirmation for both images.")
 
 
 def run_analysis(query: str, images: list[dict], parameters: dict | None = None) -> dict:
     plan = plan_query(query, len(images))
+    if len(images) == 2 and "optical_sar_fusion" in plan.tasks:
+        plan.modality = "optical_sar"
+    elif len(images) == 2 and "change_analysis" in plan.tasks:
+        plan.modality = "bi_temporal"
     if parameters:
         plan.parameters.update(parameters)
     validate(plan, images)

@@ -37,31 +37,33 @@ def _model_answer(task: str, model_id: str, query: str, image: dict) -> str | No
 def single_image_vqa(query: str, images: list[dict], parameters: dict) -> ToolResult:
     image = images[0]
     bands = image["bands"]
+    adapter = os.getenv("SATQUERY_REMOTE_ADAPTER", "not_configured")
     model_id = os.getenv("SATQUERY_VQA_MODEL", "dandelin/vilt-b32-finetuned-vqa").strip()
     if model_id:
         answer = _model_answer("visual-question-answering", model_id, query, image)
         if answer and not answer.startswith("MODEL_UNAVAILABLE:"):
-            return ToolResult("vqa", answer, [], 0.68, {"mode": "huggingface", "model": model_id, "bands": bands})
+            return ToolResult("vqa", answer, [], 0.68, {"mode": "huggingface", "model": model_id, "remote_adapter": adapter, "bands": bands})
     answer = (
         "The uploaded scene is available for analysis, but no production VLM weights "
         "are installed yet. The deterministic preview confirms a "
         f"{bands}-band {image['extension'].upper()} image."
     )
-    return ToolResult("vqa", answer, [], 0.35, {"mode": "transparent_demo", "bands": bands})
+    return ToolResult("vqa", answer, [], 0.35, {"mode": "transparent_demo", "remote_adapter": adapter, "bands": bands})
 
 
 def scene_description(query: str, images: list[dict], parameters: dict) -> ToolResult:
     image = images[0]
+    adapter = os.getenv("SATQUERY_REMOTE_ADAPTER", "not_configured")
     model_id = os.getenv("SATQUERY_CAPTION_MODEL", "Salesforce/blip-image-captioning-base").strip()
     if model_id:
         answer = _model_answer("image-to-text", model_id, query, image)
         if answer and not answer.startswith("MODEL_UNAVAILABLE:"):
-            return ToolResult("captioning", answer, [], 0.62, {"mode": "huggingface", "model": model_id})
+            return ToolResult("captioning", answer, [], 0.62, {"mode": "huggingface", "model": model_id, "remote_adapter": adapter})
     array = image["array"]
     mean_intensity = float(np.mean(array))
     scene_hint = "bright reflective surfaces" if mean_intensity > 0.55 else "lower-reflectance surfaces"
     answer = f"The image contains {scene_hint}; detailed semantic labels require the adapted VLM adapter."
-    return ToolResult("captioning", answer, [], 0.32, {"mean_normalized_intensity": round(mean_intensity, 3)})
+    return ToolResult("captioning", answer, [], 0.32, {"mode": "transparent_demo", "remote_adapter": adapter, "mean_normalized_intensity": round(mean_intensity, 3)})
 
 
 def change_analysis(query: str, images: list[dict], parameters: dict) -> ToolResult:
