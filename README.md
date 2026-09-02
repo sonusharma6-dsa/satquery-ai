@@ -20,7 +20,14 @@ main file in Streamlit Community Cloud. The repository must include
 `requirements.txt` and `.python-version`. Do not commit `.venv`, downloaded
 weights, secrets, or raw datasets.
 
-The app runs in transparent demo mode without model weights. Set `SATQUERY_MODE=production` only after implementing or installing the specialist model adapters in `satquery/tools.py`.
+The app runs in transparent demo mode without model weights. For optional Hugging Face inference, install the model runtime and set these Streamlit Cloud secrets or local environment variables:
+
+```text
+SATQUERY_VQA_MODEL=dandelin/vilt-b32-finetuned-vqa
+SATQUERY_CAPTION_MODEL=Salesforce/blip-image-captioning-base
+```
+
+The VQA and caption models are generic baselines. For the SIH domain-adaptation claim, replace them with your BigEarthNet-adapted checkpoint and document the adaptation protocol. The change-analysis path is available without model weights and generates a thresholded visual evidence map.
 
 ## Domain adaptation
 

@@ -43,7 +43,7 @@ if uploads:
                 st.warning("Enter a question first.")
                 st.stop()
             try:
-                result = run_analysis(query, image_records, {"change_threshold": threshold})
+                result = run_analysis(query, image_records, {"change_threshold": threshold, "output_dir": temporary_directory})
             except Exception as error:
                 st.error(str(error))
                 st.stop()
@@ -59,7 +59,12 @@ if uploads:
             st.subheader("Execution summary")
             st.json({"tasks": result["plan"].tasks, "intent": result["plan"].intent, "parameters": result["plan"].parameters, "tools": [item.task for item in result["results"]]})
             st.subheader("Visual evidence")
-            st.info("Production adapters will add change maps, boxes, and masks here. The current preview deliberately labels missing evidence instead of inventing it.")
+            evidence_images = [item.metadata.get("evidence") for item in result["results"] if item.metadata.get("evidence", "").endswith(".png")]
+            if evidence_images:
+                for evidence_image in evidence_images:
+                    st.image(evidence_image, caption="Change intensity map with threshold contour", use_container_width=True)
+            else:
+                st.info("No visual evidence was produced for this task. The system deliberately reports missing evidence instead of inventing it.")
             st.download_button("Download HTML report", build_report(result), "satquery-report.html", "text/html", use_container_width=True)
 else:
     st.info("Upload a remote-sensing image to begin.")
