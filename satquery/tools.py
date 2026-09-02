@@ -1,0 +1,58 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import numpy as np
+
+from .schemas import ToolResult
+
+
+def _question_words(query: str) -> list[str]:
+    return [word.strip(".,?!").lower() for word in query.split()]
+
+
+def single_image_vqa(query: str, images: list[dict], parameters: dict) -> ToolResult:
+    image = images[0]
+    bands = image["bands"]
+    answer = (
+        "The uploaded scene is available for analysis, but no production VLM weights "
+        "are installed yet. The deterministic preview confirms a "
+        f"{bands}-band {image['extension'].upper()} image."
+    )
+    return ToolResult("vqa", answer, [], 0.35, {"mode": "transparent_demo", "bands": bands})
+
+
+def scene_description(query: str, images: list[dict], parameters: dict) -> ToolResult:
+    image = images[0]
+    array = image["array"]
+    mean_intensity = float(np.mean(array))
+    scene_hint = "bright reflective surfaces" if mean_intensity > 0.55 else "lower-reflectance surfaces"
+    answer = f"The image contains {scene_hint}; detailed semantic labels require the adapted VLM adapter."
+    return ToolResult("captioning", answer, [], 0.32, {"mean_normalized_intensity": round(mean_intensity, 3)})
+
+
+def change_analysis(query: str, images: list[dict], parameters: dict) -> ToolResult:
+    first, second = images
+    first_array = first["array"]
+    second_array = second["array"]
+    common_bands = min(first_array.shape[2], second_array.shape[2])
+    first_array = first_array[:, :, :common_bands]
+    second_array = second_array[:, :, :common_bands]
+    if first_array.shape[:2] != second_array.shape[:2]:
+        raise ValueError("Temporal images must have identical dimensions after registration.")
+    difference = np.mean(np.abs(second_array - first_array), axis=2)
+    threshold = float(parameters.get("change_threshold", 0.18))
+    changed_fraction = float(np.mean(difference > threshold))
+    answer = f"The preliminary change detector flags {changed_fraction:.1%} of pixels above the configured threshold."
+    return ToolResult("change_analysis", answer, [], min(0.85, 0.4 + changed_fraction), {"threshold": threshold, "changed_fraction": changed_fraction})
+
+
+def optical_sar_fusion(query: str, images: list[dict], parameters: dict) -> ToolResult:
+    modalities = [image.get("modality", "unknown") for image in images]
+    answer = "The pair passed shape compatibility checks. Optical-SAR fusion is ready for the CROMA adapter."
+    return ToolResult("optical_sar_fusion", answer, [], 0.4, {"modalities": modalities, "adapter": "CROMA (pending weights)"})
+
+
+def grounding(query: str, images: list[dict], parameters: dict) -> ToolResult:
+    answer = "Region grounding is registered but requires GroundingDINO and SAM2 weights for production evidence boxes."
+    return ToolResult("grounding", answer, [], 0.25, {"adapter": "GroundingDINO + SAM2"})

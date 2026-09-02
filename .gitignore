@@ -1,0 +1,14 @@
+.venv/
+.venv-1/
+myenv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.streamlit/secrets.toml
+data/raw/
+data/processed/
+weights/
+reports/
+*.npy
+*.ipynb
+.DS_Store
