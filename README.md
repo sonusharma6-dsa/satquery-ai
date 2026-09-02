@@ -20,7 +20,7 @@ main file in Streamlit Community Cloud. The repository must include
 `requirements.txt` and `.python-version`. Do not commit `.venv`, downloaded
 weights, secrets, or raw datasets.
 
-The app runs in transparent demo mode without model weights. For optional Hugging Face inference, install the model runtime and set these Streamlit Cloud secrets or local environment variables:
+The app attempts real Hugging Face inference by default. The first VQA or caption request downloads model weights, so the first request can take several minutes. Override the defaults with these Streamlit Cloud secrets or local environment variables:
 
 ```text
 SATQUERY_VQA_MODEL=dandelin/vilt-b32-finetuned-vqa

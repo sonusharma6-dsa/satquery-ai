@@ -37,7 +37,7 @@ def _model_answer(task: str, model_id: str, query: str, image: dict) -> str | No
 def single_image_vqa(query: str, images: list[dict], parameters: dict) -> ToolResult:
     image = images[0]
     bands = image["bands"]
-    model_id = os.getenv("SATQUERY_VQA_MODEL", "").strip()
+    model_id = os.getenv("SATQUERY_VQA_MODEL", "dandelin/vilt-b32-finetuned-vqa").strip()
     if model_id:
         answer = _model_answer("visual-question-answering", model_id, query, image)
         if answer and not answer.startswith("MODEL_UNAVAILABLE:"):
@@ -52,7 +52,7 @@ def single_image_vqa(query: str, images: list[dict], parameters: dict) -> ToolRe
 
 def scene_description(query: str, images: list[dict], parameters: dict) -> ToolResult:
     image = images[0]
-    model_id = os.getenv("SATQUERY_CAPTION_MODEL", "").strip()
+    model_id = os.getenv("SATQUERY_CAPTION_MODEL", "Salesforce/blip-image-captioning-base").strip()
     if model_id:
         answer = _model_answer("image-to-text", model_id, query, image)
         if answer and not answer.startswith("MODEL_UNAVAILABLE:"):

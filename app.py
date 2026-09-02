@@ -11,7 +11,7 @@ from satquery.report import build_report
 
 st.set_page_config(page_title="SatQuery AI", page_icon="🛰️", layout="wide")
 st.markdown("# SatQuery AI\n### Evidence-grounded remote-sensing analysis")
-st.caption("SIH26167 prototype | transparent demo mode until specialist weights are installed")
+st.caption("SIH26167 prototype | VQA and caption models load on first use; fallback mode remains available")
 
 with st.sidebar:
     st.header("Analysis settings")
