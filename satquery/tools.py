@@ -117,5 +117,49 @@ def optical_sar_fusion(query: str, images: list[dict], parameters: dict) -> Tool
 
 
 def grounding(query: str, images: list[dict], parameters: dict) -> ToolResult:
-    answer = "Region grounding is registered but requires GroundingDINO and SAM2 weights for production evidence boxes."
-    return ToolResult("grounding", answer, [], 0.25, {"adapter": "GroundingDINO + SAM2"})
+    image = images[0]
+    model_id = os.getenv("SATQUERY_GROUNDING_MODEL", "IDEA-Research/grounding-dino-tiny").strip()
+    labels = _grounding_labels(query)
+    try:
+        detector = _load_pipeline("zero-shot-object-detection", model_id)
+        pil_image = Image.fromarray((image["array"][:, :, :3] * 255).astype("uint8"))
+        detections = detector(pil_image, candidate_labels=labels)
+        evidence_path = _save_grounding_map(pil_image, detections, parameters.get("output_dir"))
+        confident = [item for item in detections if item.get("score", 0) >= 0.25]
+        if confident:
+            found = ", ".join(f"{item['label']} ({item['score']:.0%})" for item in confident[:5])
+            answer = f"The grounding model located: {found}."
+        else:
+            answer = "The grounding model did not find a candidate region above its confidence threshold."
+        return ToolResult("grounding", answer, [evidence_path] if evidence_path else [], 0.62 if confident else 0.35, {"mode": "huggingface", "model": model_id, "candidate_labels": labels, "detections": len(confident)})
+    except (ImportError, OSError, RuntimeError, ValueError) as error:
+        answer = "Region grounding is unavailable until the Grounding DINO model can be downloaded; no boxes were invented."
+        return ToolResult("grounding", answer, [], 0.25, {"mode": "transparent_demo", "adapter": model_id, "error": str(error)})
+
+
+def _grounding_labels(query: str) -> list[str]:
+    known_labels = ["building", "road", "water", "forest", "farmland", "vehicle", "ship", "airplane"]
+    words = {word.strip(".,?!").lower() for word in query.split()}
+    selected = [label for label in known_labels if label in words or f"{label}s" in words]
+    return selected or known_labels
+
+
+def _save_grounding_map(image: Image.Image, detections: list[dict], output_dir: str | None) -> str | None:
+    if not output_dir:
+        return None
+    try:
+        from PIL import ImageDraw
+        output_path = Path(output_dir) / "grounding_boxes.png"
+        evidence = image.copy()
+        draw = ImageDraw.Draw(evidence)
+        for item in detections:
+            if item.get("score", 0) < 0.25:
+                continue
+            box = item["box"]
+            coordinates = (box["xmin"], box["ymin"], box["xmax"], box["ymax"])
+            draw.rectangle(coordinates, outline="#00ffd5", width=3)
+            draw.text((box["xmin"] + 3, box["ymin"] + 3), f"{item['label']} {item['score']:.0%}", fill="#00ffd5")
+        evidence.save(output_path)
+        return str(output_path)
+    except (OSError, ValueError):
+        return None
