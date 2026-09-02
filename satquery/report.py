@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import html
+import base64
 from datetime import datetime, timezone
+from pathlib import Path
 
 
 def build_report(result: dict) -> str:
@@ -11,10 +13,16 @@ def build_report(result: dict) -> str:
         f"<td>{item.confidence:.0%}</td><td>{html.escape(str(item.metadata))}</td></tr>"
         for item in result["results"]
     )
+    evidence_html = ""
+    for item in result["results"]:
+        evidence_path = item.metadata.get("evidence")
+        if evidence_path and Path(evidence_path).exists():
+            encoded = base64.b64encode(Path(evidence_path).read_bytes()).decode("ascii")
+            evidence_html += f"<h2>Visual evidence</h2><img style='max-width:800px' src='data:image/png;base64,{encoded}'><p>{html.escape(evidence_path)}</p>"
     return f"""<!doctype html><html><head><meta charset='utf-8'><title>SatQuery AI report</title>
     <style>body{{font-family:Arial;max-width:1000px;margin:40px auto;color:#17212b}}table{{border-collapse:collapse;width:100%}}td,th{{border:1px solid #ccd5dc;padding:8px;text-align:left}}.score{{font-size:28px;color:#087f5b}}</style></head><body>
     <h1>SatQuery AI Analysis Report</h1><p>{datetime.now(timezone.utc).isoformat()}</p>
     <p class='score'>Overall confidence: {result['confidence']:.0%}</p>
     <h2>Answer</h2><p>{html.escape(result['answer']).replace(chr(10), '<br>')}</p>
     <h2>Execution summary</h2><p>Detected tasks: {html.escape(', '.join(plan.tasks))}<br>Intent: {html.escape(plan.intent)}<br>Modality: {html.escape(plan.modality)}</p>
-    <table><tr><th>Tool</th><th>Output</th><th>Confidence</th><th>Parameters</th></tr>{rows}</table></body></html>"""
+    <table><tr><th>Tool</th><th>Output</th><th>Confidence</th><th>Parameters</th></tr>{rows}</table>{evidence_html}</body></html>"""

@@ -49,15 +49,21 @@ if uploads:
                     help="Confirm that this image is spatially aligned with the other uploaded image.",
                 )
 
-        if st.button("Analyze", type="primary", use_container_width=True):
-            if not query.strip():
-                st.warning("Enter a question first.")
-                st.stop()
-            try:
-                result = run_analysis(query, image_records, {"change_threshold": threshold, "output_dir": temporary_directory})
-            except Exception as error:
-                st.error(str(error))
-                st.stop()
+        analyze_clicked = st.button("Analyze", type="primary", use_container_width=True)
+        if analyze_clicked or st.session_state.get("analysis_result"):
+            if analyze_clicked:
+                if not query.strip():
+                    st.warning("Enter a question first.")
+                    st.stop()
+                try:
+                    result = run_analysis(query, image_records, {"change_threshold": threshold, "output_dir": temporary_directory})
+                    st.session_state["analysis_result"] = result
+                    st.session_state["analysis_report"] = build_report(result)
+                except Exception as error:
+                    st.error(str(error))
+                    st.stop()
+            else:
+                result = st.session_state["analysis_result"]
 
             left, right = st.columns([3, 1])
             with left:
@@ -76,6 +82,6 @@ if uploads:
                     st.image(evidence_image, caption="Change intensity map with threshold contour", use_container_width=True)
             else:
                 st.info("No visual evidence was produced for this task. The system deliberately reports missing evidence instead of inventing it.")
-            st.download_button("Download HTML report", build_report(result), "satquery-report.html", "text/html", use_container_width=True)
+            st.download_button("Download HTML report", st.session_state.get("analysis_report", build_report(result)), "satquery-report.html", "text/html", use_container_width=True)
 else:
     st.info("Upload a remote-sensing image to begin.")

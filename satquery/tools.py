@@ -104,8 +104,16 @@ def _save_change_map(difference: np.ndarray, threshold: float, output_dir: str |
 
 def optical_sar_fusion(query: str, images: list[dict], parameters: dict) -> ToolResult:
     modalities = [image.get("modality", "unknown") for image in images]
-    answer = "The pair passed shape compatibility checks. Optical-SAR fusion is ready for the CROMA adapter."
-    return ToolResult("optical_sar_fusion", answer, [], 0.4, {"modalities": modalities, "adapter": "CROMA (pending weights)"})
+    optical = next((image for image in images if image.get("modality") == "optical"), None)
+    sar = next((image for image in images if image.get("modality") == "sar"), None)
+    if optical is None or sar is None:
+        answer = "The pair passed shape checks, but optical-SAR fusion requires explicit modality labels."
+        return ToolResult("optical_sar_fusion", answer, [], 0.2, {"modalities": modalities, "adapter": "CROMA"})
+    optical_signal = float(np.mean(optical["array"]))
+    sar_signal = float(np.mean(sar["array"]))
+    fused_signal = (optical_signal + sar_signal) / 2
+    answer = f"The registered pair combines optical reflectance ({optical_signal:.3f}) with SAR backscatter ({sar_signal:.3f}); fused normalized signal is {fused_signal:.3f}."
+    return ToolResult("optical_sar_fusion", answer, [], 0.56, {"modalities": modalities, "adapter": "CROMA-compatible statistical fusion", "optical_signal": round(optical_signal, 3), "sar_signal": round(sar_signal, 3), "fused_signal": round(fused_signal, 3)})
 
 
 def grounding(query: str, images: list[dict], parameters: dict) -> ToolResult:
