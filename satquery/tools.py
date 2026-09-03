@@ -87,18 +87,27 @@ def _save_change_map(difference: np.ndarray, threshold: float, output_dir: str |
     if not output_dir:
         return None
     try:
-        import matplotlib.pyplot as plt
         output_path = Path(output_dir) / "change_map.png"
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        figure, axis = plt.subplots(figsize=(7, 5))
-        axis.imshow(difference, cmap="magma", vmin=0, vmax=1)
-        axis.contour(difference > threshold, levels=[0.5], colors="#00ffd5", linewidths=0.8)
-        axis.set_axis_off()
-        figure.tight_layout(pad=0)
-        figure.savefig(output_path, dpi=150, bbox_inches="tight")
-        plt.close(figure)
+        intensity = np.clip(difference, 0, 1)
+        heatmap = np.stack(
+            [255 * intensity, 80 * (1 - intensity), 180 * (1 - intensity)], axis=2
+        ).astype("uint8")
+        evidence = Image.fromarray(heatmap, mode="RGB")
+        changed = difference > threshold
+        boundary = changed & ~(
+            np.roll(changed, 1, axis=0)
+            & np.roll(changed, -1, axis=0)
+            & np.roll(changed, 1, axis=1)
+            & np.roll(changed, -1, axis=1)
+        )
+        overlay = Image.new("RGBA", evidence.size, (0, 0, 0, 0))
+        overlay_pixels = np.asarray(overlay).copy()
+        overlay_pixels[boundary] = (0, 255, 213, 255)
+        evidence = Image.alpha_composite(evidence.convert("RGBA"), Image.fromarray(overlay_pixels, mode="RGBA"))
+        evidence.convert("RGB").save(output_path)
         return str(output_path)
-    except (ImportError, OSError, ValueError):
+    except (OSError, ValueError, TypeError):
         return None
 
 

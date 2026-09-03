@@ -47,6 +47,8 @@ def validate(plan: AnalysisPlan, images: list[dict]) -> None:
 
 
 def run_analysis(query: str, images: list[dict], parameters: dict | None = None) -> dict:
+    if not query.strip():
+        raise ValueError("Ask a question about the uploaded scene.")
     plan = plan_query(query, len(images))
     if len(images) == 2 and "optical_sar_fusion" in plan.tasks:
         plan.modality = "optical_sar"
