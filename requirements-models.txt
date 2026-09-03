@@ -1,5 +1,6 @@
 # Optional local/model-serving dependencies. The Streamlit deployment does not
 # need these because SatQuery reports a transparent fallback when unavailable.
+rasterio>=1.3,<2
 torch>=2.4
 torchvision>=0.19
 transformers>=4.46

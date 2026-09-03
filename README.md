@@ -13,8 +13,9 @@ python -m pip install -r requirements.txt
 streamlit run app.py
 ```
 
-The deployment requirements intentionally stay lightweight. To enable local
-Hugging Face inference or adapter training, install the optional stack too:
+The deployment requirements intentionally stay lightweight and support PNG/JPEG
+analysis without native geospatial libraries. To enable GeoTIFF input, local
+Hugging Face inference, or adapter training, install the optional stack too:
 
 ```powershell
 python -m pip install -r requirements-models.txt
