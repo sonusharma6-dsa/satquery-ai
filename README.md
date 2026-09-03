@@ -13,6 +13,13 @@ python -m pip install -r requirements.txt
 streamlit run app.py
 ```
 
+The deployment requirements intentionally stay lightweight. To enable local
+Hugging Face inference or adapter training, install the optional stack too:
+
+```powershell
+python -m pip install -r requirements-models.txt
+```
+
 ## Streamlit Community Cloud
 
 Create a GitHub repository containing this folder, then choose `app.py` as the
@@ -20,7 +27,10 @@ main file in Streamlit Community Cloud. The repository must include
 `requirements.txt` and `.python-version`. Do not commit `.venv`, downloaded
 weights, secrets, or raw datasets.
 
-The app attempts real Hugging Face inference by default. The first VQA or caption request downloads model weights, so the first request can take several minutes. Override the defaults with these Streamlit Cloud secrets or local environment variables:
+The app attempts real Hugging Face inference when the optional stack is
+installed. The first VQA or caption request downloads model weights, so the
+first request can take several minutes. Override the defaults with these
+Streamlit Cloud secrets or local environment variables:
 
 ```text
 SATQUERY_VQA_MODEL=dandelin/vilt-b32-finetuned-vqa
