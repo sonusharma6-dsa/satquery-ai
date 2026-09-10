@@ -4,13 +4,32 @@ A transparent, multimodal remote-sensing assistant for SIH26167. The demo suppor
 
 ## Run
 
-Use Python 3.11 or 3.12 (PyTorch and Rasterio are not consistently available for Python 3.14):
+Use Python 3.11 or 3.12 (PyTorch and Rasterio are not consistently available for Python 3.14).
+
+No environment variables are required for the core demo path (PNG/JPEG + deterministic fallback answers).
+
+### Windows (PowerShell)
 
 ```powershell
 py -3.11 -m venv .venv-satquery
 .\.venv-satquery\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
-streamlit run app.py
+python run.py
+```
+
+### Linux / macOS (bash or zsh)
+
+```bash
+python3.11 -m venv .venv-satquery
+source .venv-satquery/bin/activate
+python -m pip install -r requirements.txt
+python run.py
+```
+
+`run.py` is a thin startup wrapper that launches `streamlit run app.py` with the same extra flags, for example:
+
+```bash
+python run.py --server.port 8502 --server.headless true
 ```
 
 The deployment requirements intentionally stay lightweight and support PNG/JPEG
@@ -37,6 +56,14 @@ Streamlit Cloud secrets or local environment variables:
 SATQUERY_VQA_MODEL=dandelin/vilt-b32-finetuned-vqa
 SATQUERY_CAPTION_MODEL=Salesforce/blip-image-captioning-base
 ```
+
+## Troubleshooting
+
+- If you run `python app.py`, Streamlit will print `missing ScriptRunContext` warnings. Use `python run.py` (or `streamlit run app.py`) instead.
+- If GeoTIFF upload fails with Rasterio import errors, install the optional stack:
+  `python -m pip install -r requirements-models.txt`
+- To validate local setup quickly:
+  `python -m unittest discover -s tests -q`
 
 The VQA and caption models are generic baselines. For the SIH domain-adaptation claim, replace them with your BigEarthNet-adapted checkpoint and document the adaptation protocol. The change-analysis path is available without model weights and generates a thresholded visual evidence map.
 
