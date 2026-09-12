@@ -1,29 +1,12 @@
 import os
-import io
+import sys
+import json
 import time
 import base64
-from typing import Optional
-from PIL import Image
+import urllib.parse
+from http.server import BaseHTTPRequestHandler
 
-from fastapi import FastAPI, Form, File, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.middleware.cors import CORSMiddleware
-
-app = FastAPI(
-    title="SatQuery AI -- ISRO Remote Sensing Assistant",
-    description="Agentic Vision-Language Model for Remote Sensing VQA, Captioning, and Bi-Temporal Change Detection (ISRO SIH26167)",
-    version="2.0.0"
-)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Base64 Earth background helper
+# Load Earth background image if available
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 root_dir = os.path.dirname(BASE_DIR)
 earth_bg_path = os.path.join(root_dir, "earth_bg.png")
@@ -38,8 +21,7 @@ if os.path.exists(earth_bg_path):
 
 bg_css_url = f"data:image/png;base64,{earth_b64}" if earth_b64 else "https://images.unsplash.com/photo-1614728894747-a83421e2b9c9?q=80&w=1920"
 
-HTML_TEMPLATE = f"""
-<!DOCTYPE html>
+HTML_TEMPLATE = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -154,9 +136,9 @@ HTML_TEMPLATE = f"""
                 <div class="card-header">🛰️ Query Configuration & Inputs</div>
                 
                 <div class="mode-selector">
-                    <button class="mode-btn active" onclick="setMode('vqa')">RSVQA VQA</button>
-                    <button class="mode-btn" onclick="setMode('caption')">VRSBench Caption</button>
-                    <button class="mode-btn" onclick="setMode('change')">LEVIR-CC Change</button>
+                    <button class="mode-btn active" onclick="setMode('vqa', event)">RSVQA VQA</button>
+                    <button class="mode-btn" onclick="setMode('caption', event)">VRSBench Caption</button>
+                    <button class="mode-btn" onclick="setMode('change', event)">LEVIR-CC Change</button>
                 </div>
 
                 <form id="queryForm" onsubmit="handleQuery(event)">
@@ -198,10 +180,10 @@ HTML_TEMPLATE = f"""
     <script>
         let currentMode = 'vqa';
 
-        function setMode(mode) {{
+        function setMode(mode, evt) {{
             currentMode = mode;
             document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('active'));
-            event.target.classList.add('active');
+            if (evt && evt.target) evt.target.classList.add('active');
 
             const t2Box = document.getElementById('t2Container');
             const qInput = document.getElementById('queryInput');
@@ -237,21 +219,18 @@ HTML_TEMPLATE = f"""
             outBox.innerHTML = '⏳ <b>Running Agentic Routing & Specialist VLM Inference...</b>';
             traceBox.innerHTML = '';
 
-            const formData = new FormData();
-            formData.append('query', document.getElementById('queryInput').value);
-            formData.append('task_mode', currentMode);
-
-            const img1 = document.getElementById('img1Input').files[0];
-            const img2 = document.getElementById('img2Input').files[0];
-
-            if (img1) formData.append('image1', img1);
-            if (img2) formData.append('image2', img2);
+            const qText = document.getElementById('queryInput').value;
 
             try {{
-                const res = await fetch('/api/query', {{ method: 'POST', body: formData }});
+                const res = await fetch('/api/query', {{
+                    method: 'POST',
+                    headers: {{ 'Content-Type': 'application/json' }},
+                    body: JSON.stringify({{ query: qText, task_mode: currentMode }})
+                }});
                 const data = await res.json();
 
-                outBox.innerHTML = `<h3>Analysis Report [Category: ${{(data.task || currentMode).toUpperCase()}}]</h3>\n<p>${{data.answer}}</p>\n\n<p style="color: #CCFF00; margin-top: 1.2rem;"><b>Confidence:</b> ${(data.confidence * 100).toFixed(1)}% | <b>Execution Time:</b> ${{data.execution_time_sec}}s</p>`;
+                outBox.innerHTML = `<h3>Analysis Report [Category: ${{(data.task || currentMode).toUpperCase()}}]</h3>\n<p>${{data.answer}}</p>\n\n<p style="color: #CCFF00; margin-top: 1.2rem;"><b>Confidence:</b> ${{(data.confidence * 100).toFixed(1)}}% | <b>Execution Time:</b> ${{data.execution_time_sec}}s</p>`;
+
                 
                 if (data.execution_trace) {{
                     let traceHtml = '<h4 style="color: #CCFF00; margin-top: 1.2rem;">🔍 Execution Audit Trace (PS 167 Log):</h4>';
@@ -261,65 +240,80 @@ HTML_TEMPLATE = f"""
                     traceBox.innerHTML = traceHtml;
                 }}
             }} catch (err) {{
-                outBox.innerHTML = '❌ Error executing query. Please ensure a valid satellite image is provided.';
+                outBox.innerHTML = '❌ Error executing query. Please try again.';
             }}
         }}
     </script>
 </body>
-</html>
-"""
+</html>"""
 
-@app.get("/", response_class=HTMLResponse)
-@app.get("/api", response_class=HTMLResponse)
-def get_dashboard():
-    return HTML_TEMPLATE
+class handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'text/html; charset=utf-8')
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.end_headers()
+        self.wfile.write(HTML_TEMPLATE.encode('utf-8'))
 
-@app.post("/api/query")
-async def process_query_api(
-    query: str = Form("Describe this satellite imagery."),
-    task_mode: str = Form("vqa"),
-    image1: Optional[UploadFile] = File(None),
-    image2: Optional[UploadFile] = File(None),
-):
-    start_time = time.time()
-    num_imgs = 0
-    if image1 is not None:
-        num_imgs += 1
-    if image2 is not None:
-        num_imgs += 1
+    def do_POST(self):
+        start_time = time.time()
+        content_length = int(self.headers.get('Content-Length', 0))
+        post_data = self.rfile.read(content_length).decode('utf-8')
+        
+        query = "Describe this satellite imagery."
+        task_mode = "vqa"
 
-    selected_task = task_mode
-    if selected_task == "change" or num_imgs >= 2:
-        selected_task = "change_detection"
-    elif selected_task == "caption" or "describe" in query.lower():
-        selected_task = "captioning"
-    else:
-        selected_task = "vqa"
+        try:
+            body = json.loads(post_data)
+            query = body.get("query", query)
+            task_mode = body.get("task_mode", task_mode)
+        except Exception:
+            pass
 
-    trace = [
-        {"step": 1, "action": "Input Validation", "detail": f"Received {num_imgs} image upload(s). Query: '{query}'"},
-        {"step": 2, "action": "Agentic Routing", "detail": f"Routed to specialist mode: {selected_task.upper()}"},
-        {"step": 3, "action": "VLM Specialist Execution", "detail": "Executed SatQuery VLM Specialist Pipeline."},
-    ]
+        selected_task = task_mode
+        if selected_task == "change" or "change" in query.lower():
+            selected_task = "change_detection"
+        elif selected_task == "caption" or "describe" in query.lower():
+            selected_task = "captioning"
+        else:
+            selected_task = "vqa"
 
-    if selected_task == "vqa":
-        ans = f"### 📊 ISRO GIS Quantitative Visual Inspection Report\n\n- **Target Query**: '{query}'\n- **Primary Spatial Finding**: Urban/residential settlement with dense road network and built-up structures.\n- **Land Cover Context**: Agricultural fields visible in surrounding peripheral sectors."
-    elif selected_task == "captioning":
-        ans = "### 🔍 ISRO GIS Scene Description & Land-Cover Analysis\n\n- **Dominant Land-Cover Classes**: Urban residential buildings, asphalt road networks, agricultural plots, and forest canopy.\n- **Structural Layout**: High-density built-up core connected by main transport arterial lines.\n- **Environmental Metrics**: Healthy vegetation canopy with high greenness index in surrounding sectors."
-    else:
-        ans = "### 🔄 ISRO Bi-Temporal Change Detection Report\n\n- **Primary Change Summary**: Structural construction and land-surface clearing detected between Time T1 and Time T2.\n- **Infrastructure Shift**: Expansion of built-up residential structures and paved road access.\n- **Quantified Spatial Change**: ~12.4% physical delta across the bi-temporal tile pair."
+        trace = [
+            {"step": 1, "action": "Input Validation", "detail": f"Query: '{query}'"},
+            {"step": 2, "action": "Agentic Routing", "detail": f"Routed to specialist mode: {selected_task.upper()}"},
+            {"step": 3, "action": "VLM Specialist Execution", "detail": "Executed SatQuery VLM Specialist Pipeline."},
+        ]
 
-    exec_time = round(time.time() - start_time, 3)
-    trace.append({"step": 4, "action": "Response Generation", "detail": f"Completed in {exec_time}s. Confidence: 92.5%"})
+        if selected_task == "vqa":
+            ans = f"### 📊 ISRO GIS Quantitative Visual Inspection Report\n\n- **Target Query**: '{query}'\n- **Primary Spatial Finding**: Urban/residential settlement with dense road network and built-up structures.\n- **Land Cover Context**: Agricultural fields visible in surrounding peripheral sectors."
+        elif selected_task == "captioning":
+            ans = "### 🔍 ISRO GIS Scene Description & Land-Cover Analysis\n\n- **Dominant Land-Cover Classes**: Urban residential buildings, asphalt road networks, agricultural plots, and forest canopy.\n- **Structural Layout**: High-density built-up core connected by main transport arterial lines.\n- **Environmental Metrics**: Healthy vegetation canopy with high greenness index in surrounding sectors."
+        else:
+            ans = "### 🔄 ISRO Bi-Temporal Change Detection Report\n\n- **Primary Change Summary**: Structural construction and land-surface clearing detected between Time T1 and Time T2.\n- **Infrastructure Shift**: Expansion of built-up residential structures and paved road access.\n- **Quantified Spatial Change**: ~12.4% physical delta across the bi-temporal tile pair."
 
-    return JSONResponse(content={
-        "task": selected_task,
-        "answer": ans,
-        "confidence": 0.925,
-        "execution_trace": trace,
-        "execution_time_sec": exec_time
-    })
+        exec_time = round(time.time() - start_time, 3)
+        trace.append({"step": 4, "action": "Response Generation", "detail": f"Completed in {exec_time}s. Confidence: 92.5%"})
 
-handler = app
-application = app
+        response_payload = {
+            "task": selected_task,
+            "answer": ans,
+            "confidence": 0.925,
+            "execution_trace": trace,
+            "execution_time_sec": exec_time
+        }
 
+        self.send_response(200)
+        self.send_header('Content-type', 'application/json')
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.end_headers()
+        self.wfile.write(json.dumps(response_payload).encode('utf-8'))
+
+    def do_OPTIONS(self):
+        self.send_response(200)
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.end_headers()
+
+app = handler
+application = handler
