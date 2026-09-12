@@ -3,18 +3,31 @@ import time
 from http.server import BaseHTTPRequestHandler
 
 class handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'application/json')
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.end_headers()
+        response = {
+            "status": "online",
+            "service": "SatQuery AI Remote Sensing VLM API Gateway",
+            "version": "2.0.0",
+            "protocol": "ISRO SIH 167"
+        }
+        self.wfile.write(json.dumps(response).encode('utf-8'))
+
     def do_POST(self):
         start_time = time.time()
-        content_length = int(self.headers.get('Content-Length', 0))
-        post_data = self.rfile.read(content_length).decode('utf-8')
-        
         query = "Describe this satellite imagery."
         task_mode = "vqa"
 
         try:
-            body = json.loads(post_data)
-            query = body.get("query", query)
-            task_mode = body.get("task_mode", task_mode)
+            content_length = int(self.headers.get('Content-Length', 0))
+            if content_length > 0:
+                raw_body = self.rfile.read(content_length).decode('utf-8', errors='ignore')
+                body = json.loads(raw_body)
+                query = body.get("query", query)
+                task_mode = body.get("task_mode", task_mode)
         except Exception:
             pass
 
