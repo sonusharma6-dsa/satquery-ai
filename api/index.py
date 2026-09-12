@@ -319,3 +319,7 @@ async def process_query_api(
         "execution_trace": trace,
         "execution_time_sec": exec_time
     })
+
+handler = app
+application = app
+
