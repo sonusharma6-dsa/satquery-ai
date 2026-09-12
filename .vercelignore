@@ -1,0 +1,7 @@
+*.py
+*.whl
+*.zip
+*.jsonl
+data/
+.venv/
+!api/
