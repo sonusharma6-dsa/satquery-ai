@@ -27,15 +27,19 @@ app.add_middleware(
 )
 
 # Load Earth background if available
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+earth_bg_path = os.path.join(BASE_DIR, "earth_bg.png")
+
 earth_b64 = ""
-if os.path.exists("earth_bg.png"):
+if os.path.exists(earth_bg_path):
     try:
-        with open("earth_bg.png", "rb") as f:
+        with open(earth_bg_path, "rb") as f:
             earth_b64 = base64.b64encode(f.read()).decode()
     except Exception:
         pass
 
 bg_css_url = f"data:image/png;base64,{earth_b64}" if earth_b64 else "https://images.unsplash.com/photo-1614728894747-a83421e2b9c9?q=80&w=1920"
+
 
 HTML_TEMPLATE = f"""
 <!DOCTYPE html>
