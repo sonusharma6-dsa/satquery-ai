@@ -9,3 +9,8 @@ __pycache__/
 .DS_Store
 data/
 *.jsonl
+lora_smoke/
+lora_adapter/lora_master_all_datasets/
+lora_adapter/tokenizer.json
+lora_adapter/vocab.json
+lora_adapter/merges.txt
