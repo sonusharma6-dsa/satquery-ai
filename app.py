@@ -403,12 +403,18 @@ is_optical_sar = False
 with col1:
     st.markdown('<div class="dark-panel">', unsafe_allow_html=True)
     st.subheader("🖼️ Imagery Intake Workstation")
+    use_demo = st.checkbox("⚡ Use Preset ISRO Demo Imagery Suite", value=False)
+
     if mode == "Single Image (VQA / Captioning)":
         uploaded = st.file_uploader("Upload Satellite Image (TIFF/PNG/JPEG):", type=["png", "jpg", "jpeg", "tif", "tiff"])
         if uploaded:
             img = Image.open(uploaded).convert("RGB")
             images.append(img)
             st.image(img, caption="Uploaded Satellite Tile (256x256 RGB)", use_container_width=True)
+        elif use_demo:
+            img = Image.open("sample_satellite.png").convert("RGB")
+            images.append(img)
+            st.image(img, caption="[DEMO PRESET] Urban Residential Satellite Sector (256x256 RGB)", use_container_width=True)
 
     elif mode == "Bi-Temporal Pair (Change Detection)":
         up1 = st.file_uploader("Upload Image T1 (Earlier):", type=["png", "jpg", "jpeg", "tif", "tiff"])
@@ -417,6 +423,10 @@ with col1:
             img1, img2 = Image.open(up1).convert("RGB"), Image.open(up2).convert("RGB")
             images.extend([img1, img2])
             st.image([img1, img2], caption=["Time T1 (Base)", "Time T2 (Target)"], width=250)
+        elif use_demo:
+            img1, img2 = Image.open("sample_t1.png").convert("RGB"), Image.open("sample_t2.png").convert("RGB")
+            images.extend([img1, img2])
+            st.image([img1, img2], caption=["[DEMO PRESET] Time T1 (Base)", "[DEMO PRESET] Time T2 (Target)"], width=250)
 
     elif mode == "Optical + SAR Pair (Cross-Modal Fusion)":
         is_optical_sar = True
@@ -426,6 +436,10 @@ with col1:
             img_opt, img_sar = Image.open(up_opt).convert("RGB"), Image.open(up_sar).convert("RGB")
             images.extend([img_opt, img_sar])
             st.image([img_opt, img_sar], caption=["Optical Sensor", "SAR Sensor"], width=250)
+        elif use_demo:
+            img_opt, img_sar = Image.open("sample_optical.png").convert("RGB"), Image.open("sample_sar.png").convert("RGB")
+            images.extend([img_opt, img_sar])
+            st.image([img_opt, img_sar], caption=["[DEMO PRESET] Optical Multispectral", "[DEMO PRESET] SAR Radar Backscatter"], width=250)
     st.markdown('</div>', unsafe_allow_html=True)
 
 with col2:
