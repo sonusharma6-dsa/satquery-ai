@@ -1,7 +1,13 @@
-# ==============================================================================
-# 🚀 SatQuery AI — Master Multi-Dataset Training Notebook (Kaggle Dual-GPU)
-# 🛰️ Problem Statement: ISRO SIH26167
-# ==============================================================================
+"""
+verify_dataset_prep.py
+======================
+Verification & Preparation Script for SatQuery AI Multi-Dataset (Stage 1)
+Features:
+- Live, high-speed chunked downloads with progress logging (MB downloaded, %, speed MB/s, sys.stdout.flush()).
+- Never hangs silently during multi-gigabyte HuggingFace dataset downloads.
+- Downloads real RSVQA (25,000 VQA), real VRSBench Train Split (15,000 Captions), and real LEVIR-CC (15,000 1:1 T1/T2 Change Pairs).
+- Constructs master_train_50k.jsonl with Dual-Image Schema.
+"""
 
 import os
 import sys
@@ -9,29 +15,11 @@ import json
 import time
 import zipfile
 import requests
+from PIL import Image
 
-print("="*60, flush=True)
-print("Step 1: Installing Required Dependencies...", flush=True)
-print("="*60, flush=True)
-os.system("pip install -q --upgrade pip")
-os.system("pip install -q transformers==4.45.2 accelerate==0.34.2 peft==0.12.0 bitsandbytes torchvision qwen-vl-utils Pillow requests")
-
-import torch
-print("\n" + "="*60, flush=True)
-print("Step 2: Checking GPU Environment...", flush=True)
-print("="*60, flush=True)
-print("PyTorch Version:", torch.__version__, flush=True)
-print("CUDA Available:", torch.cuda.is_available(), flush=True)
-print("GPU Count:", torch.cuda.device_count(), flush=True)
-for i in range(torch.cuda.device_count()):
-    print(f"  GPU {i}: {torch.cuda.get_device_name(i)}", flush=True)
-
-# ==============================================================================
-# Helper Function: Live Download Progress
-# ==============================================================================
 def download_with_progress(url: str, dest_path: str):
     if os.path.exists(dest_path) and os.path.getsize(dest_path) > 0:
-        print(f"  [CACHE] File already exists: {dest_path} ({os.path.getsize(dest_path)/(1024*1024):.1f} MB)", flush=True)
+        print(f"  [CACHE] File already downloaded: {dest_path} ({os.path.getsize(dest_path)/(1024*1024):.1f} MB)", flush=True)
         return dest_path
     
     os.makedirs(os.path.dirname(dest_path), exist_ok=True)
@@ -54,7 +42,7 @@ def download_with_progress(url: str, dest_path: str):
                 f.write(chunk)
                 downloaded += len(chunk)
                 now = time.time()
-                if now - last_print >= 3.0 or downloaded >= total_size:
+                if now - last_print >= 2.0 or downloaded >= total_size:
                     elapsed = now - start_time
                     speed_mb = (downloaded / (1024 * 1024)) / (elapsed if elapsed > 0 else 1)
                     pct = (downloaded / total_size * 100) if total_size > 0 else 0.0
@@ -67,14 +55,7 @@ def download_with_progress(url: str, dest_path: str):
     print(f"  [DOWNLOAD COMPLETE] Saved {dest_path} ({os.path.getsize(dest_path)/(1024*1024):.1f} MB)", flush=True)
     return dest_path
 
-# ==============================================================================
-# Step 3: Multi-Dataset Download & Master JSONL Preparation (55,000 Real Samples)
-# ==============================================================================
-print("\n" + "="*60, flush=True)
-print("Step 3: Multi-Dataset Download & Master JSONL Preparation...", flush=True)
-print("="*60, flush=True)
-
-def build_master_dataset():
+def prepare_and_verify():
     os.makedirs("data/Images_LR", exist_ok=True)
     os.makedirs("data/VRSBench_Images", exist_ok=True)
     os.makedirs("data/LEVIRCC_Images/A", exist_ok=True)
@@ -82,8 +63,13 @@ def build_master_dataset():
 
     master_records = []
 
-    # 1. RSVQA VQA (25,000 Samples)
-    print("\n[3A] RSVQA VQA Dataset (25,000 samples)...", flush=True)
+    # --------------------------------------------------------------------------
+    # 1. RSVQA Dataset Preparation (25,000 VQA)
+    # --------------------------------------------------------------------------
+    print("\n" + "="*70, flush=True)
+    print("[1/3] Preparing RSVQA VQA Dataset...", flush=True)
+    print("="*70, flush=True)
+    
     q_url = "https://zenodo.org/api/records/6344334/files/LR_split_train_questions.json/content"
     a_url = "https://zenodo.org/api/records/6344334/files/LR_split_train_answers.json/content"
     img_zip_url = "https://zenodo.org/api/records/6344334/files/Images_LR.zip/content"
@@ -115,6 +101,7 @@ def build_master_dataset():
                 ans_map[qid] = ans_str
                 ans_map[str(qid)] = ans_str
 
+    rsvqa_samples = []
     rsvqa_count = 0
     for idx, q in enumerate(rsvqa_questions):
         if not isinstance(q, dict):
@@ -128,27 +115,36 @@ def build_master_dataset():
 
         ans_val = ans_map.get(qid, ans_map.get(str(qid), "residential/agricultural area"))
 
-        master_records.append({
+        rec = {
             "category": "vqa",
             "image": img_path,
             "image2": None,
             "query": f"[VQA] You are SatQuery AI. Answer this remote sensing question: {q_text}",
             "response": str(ans_val)
-        })
+        }
+        master_records.append(rec)
+        if len(rsvqa_samples) < 5:
+            rsvqa_samples.append(rec)
         rsvqa_count += 1
         if rsvqa_count >= 25000:
             break
+
     print(f"  [SUCCESS] Added {rsvqa_count} REAL RSVQA VQA samples.", flush=True)
 
-    # 2. VRSBench Captions (15,000 Samples)
-    print("\n[3B] VRSBench Captioning Dataset (15,000 samples)...", flush=True)
+    # --------------------------------------------------------------------------
+    # 2. Real VRSBench Dataset Preparation (Train Split Aligned)
+    # --------------------------------------------------------------------------
+    print("\n" + "="*70, flush=True)
+    print("[2/3] Preparing Real VRSBench Captions Dataset (Train Split Aligned)...", flush=True)
+    print("="*70, flush=True)
+
     vrs_json_url = "https://huggingface.co/datasets/xiang709/VRSBench/resolve/main/VRSBench_train.json"
     vrs_zip_url = "https://huggingface.co/datasets/xiang709/VRSBench/resolve/main/Images_train.zip"
 
     vrs_json_path = download_with_progress(vrs_json_url, "data/VRSBench_train.json")
     vrs_zip_path = download_with_progress(vrs_zip_url, "data/Images_train.zip")
 
-    print("  Extracting VRSBench images into data/VRSBench_Images...", flush=True)
+    print("  Extracting VRSBench training images into data/VRSBench_Images...", flush=True)
     with zipfile.ZipFile(vrs_zip_path, "r") as z:
         extracted = 0
         for name in z.namelist():
@@ -160,13 +156,15 @@ def build_master_dataset():
                         with z.open(name) as src, open(target_file, "wb") as dst:
                             dst.write(src.read())
                         extracted += 1
-                        if extracted % 3000 == 0:
+                        if extracted % 2000 == 0:
                             print(f"    --> Extracted {extracted} VRSBench images...", flush=True)
+    print(f"  VRSBench images extraction complete ({len(os.listdir('data/VRSBench_Images'))} images present).", flush=True)
 
     with open(vrs_json_path, "r", encoding="utf-8") as f:
         vrs_raw = json.load(f)
 
     vrs_items = vrs_raw if isinstance(vrs_raw, list) else list(vrs_raw.values())
+    vrs_samples = []
     avail_vrs = set(os.listdir("data/VRSBench_Images"))
 
     vrs_count = 0
@@ -188,23 +186,33 @@ def build_master_dataset():
         
         img_path = os.path.join("data/VRSBench_Images", img_id)
 
-        master_records.append({
+        rec = {
             "category": "captioning",
             "image": img_path,
             "image2": None,
             "query": "[CAPTION] You are SatQuery AI. Describe this satellite imagery in detail including land cover and visible structures.",
             "response": str(caption_text)
-        })
+        }
+        master_records.append(rec)
+        if len(vrs_samples) < 5:
+            vrs_samples.append(rec)
         vrs_count += 1
         if vrs_count >= 15000:
             break
-    print(f"  [SUCCESS] Added {vrs_count} Real VRSBench Caption samples.", flush=True)
 
-    # 3. LEVIR-CC Bi-Temporal Change Detection (15,000 Samples)
-    print("\n[3C] LEVIR-CC Bi-Temporal Change Detection (15,000 samples)...", flush=True)
+    print(f"  [SUCCESS] Added {vrs_count} Real VRSBench Caption samples (Train Split Aligned).", flush=True)
+
+    # --------------------------------------------------------------------------
+    # 3. Real LEVIR-CC Bi-Temporal Change Detection Preparation (Strict 1:1 Pairs)
+    # --------------------------------------------------------------------------
+    print("\n" + "="*70, flush=True)
+    print("[3/3] Preparing Real LEVIR-CC Bi-Temporal Change Detection Dataset (Strict 1:1 Pairs)...", flush=True)
+    print("="*70, flush=True)
+
     levir_zip_url = "https://huggingface.co/datasets/lcybuaa/LEVIR-CC/resolve/main/Levir-CC-dataset.zip"
     levir_zip_path = download_with_progress(levir_zip_url, "data/Levir-CC-dataset.zip")
 
+    print("  Extracting LEVIR-CC bi-temporal image pairs (A/ and B/)...", flush=True)
     levir_captions_raw = None
     with zipfile.ZipFile(levir_zip_path, "r") as z:
         extracted = 0
@@ -227,9 +235,10 @@ def build_master_dataset():
                         with z.open(member) as src, open(dst_path, "wb") as dst:
                             dst.write(src.read())
                         extracted += 1
-                        if extracted % 3000 == 0:
+                        if extracted % 2000 == 0:
                             print(f"    --> Extracted {extracted} LEVIR-CC images...", flush=True)
 
+    # Guarantee strict 1:1 equal counts between Folder A and Folder B
     a_set = set(os.listdir("data/LEVIRCC_Images/A"))
     b_set = set(os.listdir("data/LEVIRCC_Images/B"))
     common_pairs = sorted(list(a_set.intersection(b_set)))
@@ -239,8 +248,11 @@ def build_master_dataset():
     for orphan in a_set - set(common_pairs):
         os.remove(os.path.join("data/LEVIRCC_Images/A", orphan))
 
+    print(f"  LEVIR-CC Strict 1:1 Matched Bi-Temporal Pairs: {len(common_pairs)} scene pairs.", flush=True)
+
     levir_items = levir_captions_raw.get("images", []) if isinstance(levir_captions_raw, dict) else []
     levir_map = {item.get("filename"): item for item in levir_items if isinstance(item, dict) and item.get("filename")}
+    levir_samples = []
 
     levir_count = 0
     for fname in common_pairs:
@@ -256,197 +268,83 @@ def build_master_dataset():
         img_a = os.path.join("data/LEVIRCC_Images/A", fname)
         img_b = os.path.join("data/LEVIRCC_Images/B", fname)
 
-        master_records.append({
+        rec = {
             "category": "change_detection",
             "image": img_a,
             "image2": img_b,
             "query": "[CHANGE] You are SatQuery AI. Analyze bi-temporal changes between Time T1 and Time T2 for this region.",
             "response": str(change_desc).strip()
-        })
+        }
+        master_records.append(rec)
+        if len(levir_samples) < 5:
+            levir_samples.append(rec)
         levir_count += 1
         if levir_count >= 15000:
             break
+
     print(f"  [SUCCESS] Added {levir_count} Real LEVIR-CC Change Detection dual-image samples.", flush=True)
 
+    # --------------------------------------------------------------------------
+    # Save master_train_50k.jsonl
+    # --------------------------------------------------------------------------
     with open("master_train_50k.jsonl", "w", encoding="utf-8") as f:
         for r in master_records:
             f.write(json.dumps(r) + "\n")
 
     print(f"\n[SUCCESS] master_train_50k.jsonl created with total {len(master_records)} records!", flush=True)
-    return len(master_records)
 
-if not os.path.exists("master_train_50k.jsonl") or os.path.getsize("master_train_50k.jsonl") < 1000000:
-    build_master_dataset()
-else:
-    print("  [CACHE] master_train_50k.jsonl already exists and is complete.", flush=True)
+    # --------------------------------------------------------------------------
+    # Print Verification Data Required for User Approval
+    # --------------------------------------------------------------------------
+    print("\n" + "="*80, flush=True)
+    print("                STAGE 1 VERIFICATION DATA OUTPUT                ", flush=True)
+    print("="*80, flush=True)
 
-# ==============================================================================
-# Step 4: QLoRA 4-Bit Master Single-GPU Training (High Throughput)
-# ==============================================================================
-print("\n" + "="*60, flush=True)
-print("Step 4: Executing Master QLoRA 4-Bit Single-GPU Training (device_map={'' : 0})...", flush=True)
-print("="*60, flush=True)
+    print("\n--- 1. DIRECTORY LISTINGS & FILE COUNTS ---", flush=True)
+    print(f"  data/Images_LR/ count       : {len(os.listdir('data/Images_LR'))} files", flush=True)
+    print(f"  data/VRSBench_Images/ count  : {len(os.listdir('data/VRSBench_Images'))} files", flush=True)
+    print(f"  data/LEVIRCC_Images/A/ count : {len(os.listdir('data/LEVIRCC_Images/A'))} files", flush=True)
+    print(f"  data/LEVIRCC_Images/B/ count : {len(os.listdir('data/LEVIRCC_Images/B'))} files", flush=True)
 
-from PIL import Image
-from torch.utils.data import Dataset, DataLoader
-from transformers import Qwen2VLForConditionalGeneration, AutoProcessor, BitsAndBytesConfig
-from peft import get_peft_model, LoraConfig, TaskType
-from qwen_vl_utils import process_vision_info
-from torch.optim import AdamW
+    print("\n--- 2. SAMPLE RECORDS (5 PER TASK CATEGORY) ---", flush=True)
 
-class MultiTaskJsonlDataset(Dataset):
-    def __init__(self, jsonl_path: str):
-        self.items = []
-        with open(jsonl_path, "r", encoding="utf-8") as f:
-            for line in f:
-                if line.strip():
-                    self.items.append(json.loads(line))
+    print("\n>>> [VQA SAMPLES (RSVQA)] <<<", flush=True)
+    for i, s in enumerate(rsvqa_samples):
+        print(f"  Sample {i+1}:", flush=True)
+        print(f"    Image 1 : {s['image']}", flush=True)
+        print(f"    Image 2 : {s['image2']}", flush=True)
+        print(f"    Query   : {s['query']}", flush=True)
+        print(f"    Response: {s['response']}", flush=True)
 
-    def __len__(self):
-        return len(self.items)
+    print("\n>>> [VRSBENCH CAPTION SAMPLES] <<<", flush=True)
+    for i, s in enumerate(vrs_samples):
+        print(f"  Sample {i+1}:", flush=True)
+        print(f"    Image 1 : {s['image']}", flush=True)
+        print(f"    Image 2 : {s['image2']}", flush=True)
+        print(f"    Query   : {s['query']}", flush=True)
+        print(f"    Response: {s['response'][:120]}...", flush=True)
 
-    def __getitem__(self, idx):
-        item = self.items[idx]
-        img_path = item["image"]
-        img2_path = item.get("image2")
-        try:
-            image = Image.open(img_path).convert("RGB")
-        except Exception:
-            image = Image.new("RGB", (256, 256), color="green")
-        
-        image2 = None
-        if img2_path and os.path.exists(img2_path):
-            try:
-                image2 = Image.open(img2_path).convert("RGB")
-            except Exception:
-                image2 = None
+    print("\n>>> [LEVIR-CC DUAL-IMAGE CHANGE DETECTION SAMPLES] <<<", flush=True)
+    for i, s in enumerate(levir_samples):
+        print(f"  Sample {i+1}:", flush=True)
+        print(f"    Image 1 (Time T1): {s['image']}", flush=True)
+        print(f"    Image 2 (Time T2): {s['image2']}", flush=True)
+        print(f"    Query            : {s['query']}", flush=True)
+        print(f"    Response         : {s['response']}", flush=True)
 
-        return {
-            "image": image,
-            "image2": image2,
-            "query": item["query"],
-            "response": item["response"]
-        }
+    print("\n--- 3. IMAGE VISUAL INSPECTION & SUMMARY ---", flush=True)
+    for task_name, s in [("RSVQA VQA", rsvqa_samples[0]), ("VRSBench Captioning", vrs_samples[0]), ("LEVIR-CC Change Pair", levir_samples[0])]:
+        img1 = Image.open(s['image'])
+        img1_info = f"Format: {img1.format}, Size: {img1.size}, Mode: {img1.mode}"
+        img2_info = "None"
+        if s['image2'] and os.path.exists(s['image2']):
+            img2 = Image.open(s['image2'])
+            img2_info = f"Format: {img2.format}, Size: {img2.size}, Mode: {img2.mode}"
 
-def custom_collate_fn(batch):
-    return {
-        "image": [item["image"] for item in batch],
-        "image2": [item["image2"] for item in batch],
-        "query": [item["query"] for item in batch],
-        "response": [item["response"] for item in batch],
-    }
+        print(f"\n  Task: {task_name}", flush=True)
+        print(f"    Primary Image Path  : {s['image']} -> ({img1_info})", flush=True)
+        print(f"    Secondary Image Path: {s['image2']} -> ({img2_info})", flush=True)
+        print(f"    Text Target Grounding: {s['response']}", flush=True)
 
-def train_lora(train_data_path: str, output_dir: str, epochs: int = 2, batch_size: int = 4, lr: float = 2e-4):
-    model_id = "Qwen/Qwen2-VL-2B-Instruct"
-
-    print("Loading base model in 4-bit (QLoRA) mode on single GPU (device_map={'' : 0})...", flush=True)
-    quant_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_compute_dtype=torch.float16,
-        bnb_4bit_quant_type="nf4",
-    )
-    model = Qwen2VLForConditionalGeneration.from_pretrained(
-        model_id,
-        torch_dtype=torch.float16,
-        device_map={"": 0},
-        quantization_config=quant_config,
-    )
-    processor = AutoProcessor.from_pretrained(model_id)
-
-    peft_config = LoraConfig(
-        r=8,
-        lora_alpha=16,
-        target_modules=["q_proj", "v_proj", "k_proj", "o_proj"],
-        lora_dropout=0.05,
-        bias="none",
-        task_type=TaskType.CAUSAL_LM,
-    )
-
-    model = get_peft_model(model, peft_config)
-    model.print_trainable_parameters()
-
-    dataset = MultiTaskJsonlDataset(train_data_path)
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, collate_fn=custom_collate_fn)
-
-    optimizer = AdamW(model.parameters(), lr=lr)
-    model.train()
-
-    print(f"\nStarting Master LoRA fine-tuning for {epochs} epochs ({len(dataset)} samples)...", flush=True)
-    for epoch in range(epochs):
-        total_loss = 0.0
-        for step, batch in enumerate(dataloader):
-            images = batch["image"]
-            images2 = batch["image2"]
-            queries = batch["query"]
-            responses = batch["response"]
-
-            batch_loss = 0.0
-            for img1, img2, q, r in zip(images, images2, queries, responses):
-                # Build content array (dual-image if img2 present)
-                user_content = []
-                if img2 is not None:
-                    user_content.append({"type": "image", "image": img1})
-                    user_content.append({"type": "image", "image": img2})
-                else:
-                    user_content.append({"type": "image", "image": img1})
-                user_content.append({"type": "text", "text": q})
-
-                # Prompt-only message to measure prompt + vision token length
-                prompt_messages = [{"role": "user", "content": user_content}]
-                prompt_text = processor.apply_chat_template(prompt_messages, tokenize=False, add_generation_prompt=True)
-                p_img_inputs, p_vid_inputs = process_vision_info(prompt_messages)
-                prompt_inputs = processor(
-                    text=[prompt_text],
-                    images=p_img_inputs,
-                    videos=p_vid_inputs,
-                    padding=True,
-                    return_tensors="pt",
-                )
-                prompt_len = prompt_inputs.input_ids.shape[1]
-
-                # Full message (prompt + assistant response)
-                full_messages = [
-                    {"role": "user", "content": user_content},
-                    {"role": "assistant", "content": [{"type": "text", "text": r}]},
-                ]
-                text_input = processor.apply_chat_template(full_messages, tokenize=False, add_generation_prompt=False)
-                image_inputs, video_inputs = process_vision_info(full_messages)
-
-                inputs = processor(
-                    text=[text_input],
-                    images=image_inputs,
-                    videos=video_inputs,
-                    padding=True,
-                    return_tensors="pt",
-                ).to(model.device)
-
-                # Mask prompt & vision tokens (-100 = ignore_index)
-                labels = inputs.input_ids.clone()
-                labels[:, :prompt_len] = -100
-                inputs["labels"] = labels
-
-                outputs = model(**inputs)
-                loss = outputs.loss / batch_size
-                loss.backward()
-                batch_loss += loss.item()
-
-            optimizer.step()
-            optimizer.zero_grad()
-            total_loss += batch_loss
-
-            if (step + 1) % 50 == 0:
-                print(f"  Epoch [{epoch+1}/{epochs}] Step [{step+1}/{len(dataloader)}] Loss: {batch_loss:.4f}", flush=True)
-
-        print(f"Epoch {epoch+1} Complete. Avg Loss: {total_loss / len(dataloader):.4f}", flush=True)
-
-    print(f"\nSaving Master LoRA adapter checkpoint to {output_dir}...", flush=True)
-    model.save_pretrained(output_dir)
-    processor.save_pretrained(output_dir)
-    print("[SUCCESS] Master Fine-tuning complete!", flush=True)
-
-train_lora("master_train_50k.jsonl", "lora_master_all_datasets", epochs=2)
-
-os.system("zip -r lora_master_all_datasets.zip lora_master_all_datasets")
-print("\n" + "="*60, flush=True)
-print("🎉 MASTER FINISHED! Download lora_master_all_datasets.zip directly from Kaggle output!", flush=True)
-print("="*60, flush=True)
+if __name__ == "__main__":
+    prepare_and_verify()

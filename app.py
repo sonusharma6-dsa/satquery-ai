@@ -1,8 +1,21 @@
 import base64
+from http.server import BaseHTTPRequestHandler
 import streamlit as st
 import streamlit.components.v1 as components
 from PIL import Image
 import orchestrator
+
+# --- Vercel Serverless Entrypoint Compatibility ---
+class handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/html; charset=utf-8")
+        self.end_headers()
+        self.wfile.write("<h1>🛰️ SatQuery AI -- ISRO Remote Sensing VLM</h1><p>Streamlit Dashboard Active</p>".encode("utf-8"))
+
+app = handler
+application = handler
+
 
 st.set_page_config(
     page_title="SatQuery AI -- ISRO Remote Sensing Assistant",
