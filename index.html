@@ -3,185 +3,357 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SatQuery AI -- ISRO Remote Sensing VLM</title>
+    <title>SatQuery AI -- ISRO Remote Sensing Assistant</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+    <script src="https://unpkg.com/globe.gl@2.32.0/dist/globe.gl.min.js"></script>
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', system-ui, sans-serif; }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', system-ui, -apple-system, sans-serif; }
         body {
-            background: radial-gradient(circle at 50% 30%, rgba(8, 16, 32, 0.7) 0%, rgba(2, 6, 14, 0.96) 80%, #000000 100%),
-                        url('https://images.unsplash.com/photo-1614728894747-a83421e2b9c9?q=80&w=1920') no-repeat center bottom fixed;
-            background-size: cover;
+            background: radial-gradient(circle at 50% 30%, rgba(8, 16, 32, 0.5) 0%, rgba(2, 6, 14, 0.94) 80%, #000000 100%),
+                        url('https://images.unsplash.com/photo-1614728894747-a83421e2b9c9?q=80&w=1920') no-repeat center bottom fixed !important;
+            background-size: cover !important;
             color: #FFFFFF;
             min-height: 100vh;
-            padding: 1.5rem;
+            padding: 1.5rem 2rem;
+            overflow-x: hidden;
         }
-        .container { max-width: 1280px; margin: 0 auto; }
+
+        /* Top Navigation Bar */
         .nav-bar {
             display: flex; justify-content: space-between; align-items: center;
-            padding: 1rem 2rem; background: rgba(8, 15, 28, 0.88);
-            border: 1px solid rgba(204, 255, 0, 0.35); border-radius: 20px;
-            backdrop-filter: blur(20px); box-shadow: 0 10px 40px rgba(0,0,0,0.8);
-            margin-bottom: 2rem;
+            padding: 0.9rem 1.8rem; background: rgba(8, 15, 28, 0.88);
+            border: 1px solid rgba(204, 255, 0, 0.3); border-radius: 18px;
+            margin-bottom: 1.5rem; backdrop-filter: blur(25px);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.7);
         }
-        .brand { font-size: 2rem; font-weight: 900; font-style: italic; color: #FFF; }
-        .brand span { color: #CCFF00; text-shadow: 0 0 20px rgba(204, 255, 0, 0.8); }
-        .badge {
+        .brand-logo { font-size: 2.1rem; font-weight: 900; letter-spacing: -0.5px; color: #FFFFFF; font-style: italic; }
+        .brand-logo span { color: #CCFF00; text-shadow: 0 0 20px rgba(204, 255, 0, 0.7); }
+        .status-group { display: flex; align-items: center; gap: 1.2rem; }
+        .live-dot {
+            display: inline-block; width: 10px; height: 10px; background-color: #CCFF00;
+            border-radius: 50%; box-shadow: 0 0 12px #CCFF00; animation: pulseDot 1.5s infinite alternate;
+        }
+        @keyframes pulseDot { 0% { opacity: 0.4; transform: scale(0.9); } 100% { opacity: 1; transform: scale(1.3); } }
+        .status-text { color: #CCFF00; font-weight: 800; font-size: 0.8rem; letter-spacing: 1px; }
+        .badge-pill {
             background: linear-gradient(135deg, #CCFF00 0%, #A6D900 100%);
-            color: #000; padding: 0.5rem 1.5rem; border-radius: 50px;
+            color: #000000; padding: 0.45rem 1.5rem; border-radius: 50px;
             font-weight: 900; font-size: 0.85rem; text-transform: uppercase;
             letter-spacing: 1px; box-shadow: 0 0 25px rgba(204, 255, 0, 0.6);
         }
-        .status-tag { display: flex; align-items: center; gap: 0.6rem; color: #CCFF00; font-weight: 800; font-size: 0.85rem; }
-        .pulse-dot { width: 10px; height: 10px; background: #CCFF00; border-radius: 50%; box-shadow: 0 0 12px #CCFF00; animation: pulse 1.5s infinite alternate; }
-        @keyframes pulse { 0% { opacity: 0.3; transform: scale(0.8); } 100% { opacity: 1; transform: scale(1.3); } }
-        
-        .hero { text-align: center; margin-bottom: 2rem; }
-        .hero h1 { font-size: 2.8rem; font-weight: 900; margin-bottom: 0.5rem; letter-spacing: -1px; }
-        .hero p { color: #94A3B8; font-size: 1.1rem; max-width: 750px; margin: 0 auto; line-height: 1.6; }
 
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-top: 1.5rem; }
-        @media (max-width: 960px) { .grid { grid-template-columns: 1fr; } }
+        /* Layout Columns */
+        .page-layout { display: flex; gap: 1.5rem; }
+        .sidebar { width: 300px; flex-shrink: 0; }
+        .main-content { flex: 1; min-width: 0; }
 
-        .card {
-            background: rgba(10, 20, 38, 0.85); border: 1px solid rgba(255, 255, 255, 0.12);
-            border-radius: 20px; padding: 2rem; backdrop-filter: blur(25px);
-            box-shadow: 0 15px 40px rgba(0,0,0,0.6);
+        /* Hero Section (2 Columns) */
+        .hero-grid { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 1.5rem; align-items: center; margin-bottom: 1.5rem; }
+        @media (max-width: 1100px) { .hero-grid { grid-template-columns: 1fr; } }
+
+        .hero-subtitle { color: #CCFF00; font-size: 0.95rem; font-weight: 800; text-transform: uppercase; letter-spacing: 3px; margin-bottom: 0.6rem; text-shadow: 0 0 15px rgba(204, 255, 0, 0.6); }
+        .hero-title { font-size: 2.8rem; font-weight: 900; line-height: 1.08; text-transform: uppercase; margin-bottom: 1rem; letter-spacing: -1.5px; text-shadow: 0 0 30px rgba(0, 0, 0, 0.95); }
+        .hero-desc { color: #D5D5D5; font-size: 1.05rem; line-height: 1.6; margin-bottom: 1.5rem; }
+
+        /* HUD Stats Cards */
+        .stats-grid { display: flex; gap: 1.2rem; margin: 1.5rem 0rem; }
+        .stat-card {
+            background: rgba(10, 18, 34, 0.75); border: 1px solid rgba(204, 255, 0, 0.25);
+            padding: 1.2rem 1.5rem; border-radius: 16px; backdrop-filter: blur(16px);
+            flex: 1; position: relative; overflow: hidden;
         }
-        .card-header { font-size: 1.3rem; font-weight: 800; color: #CCFF00; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.8rem; }
-        
-        .mode-selector { display: flex; gap: 0.6rem; margin-bottom: 1.5rem; }
-        .mode-btn {
-            flex: 1; padding: 0.75rem 0.5rem; background: rgba(255,255,255,0.05);
-            border: 1px solid rgba(255,255,255,0.15); border-radius: 12px;
-            color: #FFF; font-weight: 700; cursor: pointer; text-align: center; font-size: 0.85rem;
-            transition: all 0.2s ease;
-        }
-        .mode-btn.active, .mode-btn:hover { background: rgba(204, 255, 0, 0.15); border-color: #CCFF00; color: #CCFF00; }
+        .stat-card::before { content: ''; position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: #CCFF00; box-shadow: 0 0 10px #CCFF00; }
+        .stat-card h2 { font-size: 2.1rem; font-weight: 900; color: #CCFF00; margin: 0; line-height: 1; text-shadow: 0 0 18px rgba(204, 255, 0, 0.5); }
+        .stat-card p { color: #A5A5A5; font-size: 0.78rem; margin-top: 0.4rem; text-transform: uppercase; letter-spacing: 1px; font-weight: 700; }
 
-        .upload-area {
+        /* 3D Globe Container */
+        #globeViz { width: 100%; height: 350px; border-radius: 20px; overflow: hidden; border: 1px solid rgba(204, 255, 0, 0.3); box-shadow: 0 0 30px rgba(0,0,0,0.8); }
+
+        /* Electric Ticker Tape Banner */
+        .ticker-banner {
+            background: linear-gradient(90deg, #CCFF00 0%, #99CC00 100%);
+            color: #000000; padding: 0.8rem 1rem; margin: 1.5rem -2rem;
+            font-weight: 900; font-size: 0.95rem; text-transform: uppercase;
+            letter-spacing: 1.5px; display: flex; justify-content: space-around;
+            align-items: center; box-shadow: 0 0 35px rgba(204, 255, 0, 0.7);
+        }
+
+        /* Glassmorphic Workstation Panels */
+        .dark-panel {
+            background: rgba(6, 12, 24, 0.88); border: 1px solid rgba(204, 255, 0, 0.35);
+            border-radius: 20px; padding: 1.8rem; margin-bottom: 1.5rem;
+            backdrop-filter: blur(25px); box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8);
+            position: relative;
+        }
+        .dark-panel::after { content: '+'; position: absolute; top: 8px; right: 12px; color: #CCFF00; font-size: 1.2rem; font-weight: 900; opacity: 0.6; }
+        .dark-panel h3 { font-size: 1.3rem; font-weight: 900; color: #CCFF00; margin-bottom: 1.2rem; display: flex; align-items: center; gap: 0.6rem; }
+
+        /* Telemetry Radio Buttons */
+        .radio-option {
+            background: rgba(10, 20, 36, 0.7); border: 1px solid rgba(255, 255, 255, 0.15);
+            padding: 0.9rem 1rem; border-radius: 14px; margin-bottom: 0.8rem;
+            cursor: pointer; font-weight: 700; font-size: 0.9rem; transition: all 0.2s ease;
+            display: flex; align-items: center; gap: 0.8rem;
+        }
+        .radio-option.selected, .radio-option:hover { border-color: #CCFF00; background: rgba(204, 255, 0, 0.12); color: #CCFF00; }
+        .radio-dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.4); display: inline-block; }
+        .radio-option.selected .radio-dot { border-color: #CCFF00; background: #CCFF00; box-shadow: 0 0 10px #CCFF00; }
+
+        /* Preset Buttons Grid */
+        .preset-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; margin-bottom: 1.2rem; }
+        .preset-btn {
+            background: rgba(10, 20, 38, 0.9); border: 1px solid rgba(204, 255, 0, 0.3);
+            border-radius: 12px; padding: 0.8rem 1rem; color: #FFFFFF; font-weight: 700;
+            font-size: 0.85rem; cursor: pointer; text-align: left; transition: all 0.2s ease;
+        }
+        .preset-btn:hover { border-color: #CCFF00; background: rgba(204, 255, 0, 0.15); color: #CCFF00; }
+
+        /* Input Controls */
+        .custom-input {
+            width: 100%; background: rgba(10, 20, 36, 0.92); color: #FFFFFF;
+            border: 1px solid rgba(204, 255, 0, 0.4); border-radius: 14px;
+            padding: 0.9rem 1.3rem; font-size: 1rem; outline: none; margin-bottom: 1.2rem;
+        }
+        .custom-input:focus { border-color: #CCFF00; box-shadow: 0 0 22px rgba(204, 255, 0, 0.7); }
+
+        /* Action Button */
+        .action-btn {
+            background: linear-gradient(135deg, #CCFF00 0%, #99CC00 100%);
+            color: #000000; font-weight: 900; font-size: 1.1rem; text-transform: uppercase;
+            letter-spacing: 1.8px; border: none; border-radius: 50px; padding: 1.1rem 2.5rem;
+            box-shadow: 0 0 30px rgba(204, 255, 0, 0.6); width: 100%; cursor: pointer;
+            transition: all 0.25s ease-in-out;
+        }
+        .action-btn:hover { transform: translateY(-2px); box-shadow: 0 0 45px rgba(204, 255, 0, 0.9); }
+
+        .workstation-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+        @media (max-width: 900px) { .workstation-grid { grid-template-columns: 1fr; } }
+
+        .upload-dropzone {
             border: 2px dashed rgba(204, 255, 0, 0.4); border-radius: 16px;
-            padding: 1.8rem; text-align: center; background: rgba(2, 6, 14, 0.6);
-            margin-bottom: 1.2rem; cursor: pointer; transition: all 0.2s ease;
+            padding: 1.5rem; text-align: center; background: rgba(2, 6, 14, 0.6);
+            margin-bottom: 1rem; cursor: pointer; transition: all 0.2s ease;
         }
-        .upload-area:hover { border-color: #CCFF00; background: rgba(204, 255, 0, 0.05); }
-        .file-input { display: none; }
+        .upload-dropzone:hover { border-color: #CCFF00; background: rgba(204, 255, 0, 0.05); }
 
-        .input-group { margin-bottom: 1.2rem; }
-        .input-group label { display: block; font-weight: 700; font-size: 0.9rem; color: #CBD5E1; margin-bottom: 0.5rem; }
-        .text-input {
-            width: 100%; padding: 1rem; background: rgba(2, 6, 14, 0.8);
-            border: 1px solid rgba(255,255,255,0.2); border-radius: 14px;
-            color: #FFF; font-size: 1rem; outline: none; transition: border-color 0.2s ease;
-        }
-        .text-input:focus { border-color: #CCFF00; box-shadow: 0 0 15px rgba(204, 255, 0, 0.3); }
-
-        .submit-btn {
-            width: 100%; padding: 1.1rem; background: linear-gradient(135deg, #CCFF00 0%, #A6D900 100%);
-            border: none; border-radius: 14px; color: #000; font-size: 1.1rem; font-weight: 900;
-            text-transform: uppercase; letter-spacing: 1px; cursor: pointer;
-            box-shadow: 0 0 30px rgba(204, 255, 0, 0.5); transition: all 0.2s ease;
-        }
-        .submit-btn:hover { transform: translateY(-2px); box-shadow: 0 0 45px rgba(204, 255, 0, 0.8); }
-
-        .result-box { background: rgba(2, 6, 14, 0.9); border: 1px solid rgba(204, 255, 0, 0.3); border-radius: 16px; padding: 1.5rem; min-height: 200px; }
-        .result-text { font-size: 1.05rem; line-height: 1.7; color: #F1F5F9; white-space: pre-wrap; }
-        .trace-item { background: rgba(255,255,255,0.03); border-left: 3px solid #CCFF00; padding: 0.75rem 1rem; margin-top: 0.8rem; border-radius: 0 8px 8px 0; font-size: 0.88rem; }
+        .report-card { background: rgba(2, 6, 14, 0.92); border: 1px solid rgba(204, 255, 0, 0.3); border-radius: 16px; padding: 1.5rem; margin-top: 1.2rem; }
+        .report-text { font-size: 1.05rem; line-height: 1.7; color: #F1F5F9; white-space: pre-wrap; }
+        .trace-box { margin-top: 1rem; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 1rem; }
+        .trace-step { background: rgba(255,255,255,0.03); border-left: 3px solid #CCFF00; padding: 0.75rem 1rem; margin-top: 0.6rem; border-radius: 0 8px 8px 0; font-size: 0.88rem; }
         .preview-img { max-width: 100%; max-height: 180px; border-radius: 12px; border: 1px solid rgba(204, 255, 0, 0.4); margin-top: 0.8rem; display: none; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <!-- Navigation -->
-        <div class="nav-bar">
-            <div class="brand">SatQuery <span>AI</span></div>
-            <div class="status-tag">
-                <span class="pulse-dot"></span> VERCEL VLM GATEWAY ONLINE
-            </div>
-            <div class="badge">ISRO SIH26167</div>
-        </div>
 
-        <!-- Hero -->
-        <div class="hero">
-            <h1>ISRO Remote Sensing Vision-Language Assistant</h1>
-            <p>Agentic Multi-Task Deep Learning Pipeline for Satellite VQA, Land-Cover Captioning, and Bi-Temporal Change Detection.</p>
+    <!-- Top Navigation Bar -->
+    <div class="nav-bar">
+        <div class="brand-logo">SatQuery <span>AI</span></div>
+        <div class="status-group">
+            <span class="live-dot"></span>
+            <span class="status-text">LIVE TELEMETRY: ISRO VLM GATEWAY ACTIVE</span>
         </div>
+        <div class="badge-pill">ISRO SIH26167</div>
+    </div>
 
-        <!-- Main Grid -->
-        <div class="grid">
-            <!-- Left Form Card -->
-            <div class="card">
-                <div class="card-header">🛰️ Query Configuration & Inputs</div>
+    <!-- Main Container -->
+    <div class="page-layout">
+        <!-- Sidebar Controls -->
+        <div class="sidebar">
+            <div class="dark-panel">
+                <h3>⚙️ Telemetry Controls</h3>
+                <p style="color: #94A3B8; font-size: 0.85rem; margin-bottom: 1rem;">Select Input Mode:</p>
                 
-                <div class="mode-selector">
-                    <button class="mode-btn active" onclick="setMode('vqa', event)">RSVQA VQA</button>
-                    <button class="mode-btn" onclick="setMode('caption', event)">VRSBench Caption</button>
-                    <button class="mode-btn" onclick="setMode('change', event)">LEVIR-CC Change</button>
+                <div class="radio-option selected" id="opt-vqa" onclick="selectMode('vqa')">
+                    <span class="radio-dot"></span> Single Image (VQA / Captioning)
+                </div>
+                <div class="radio-option" id="opt-change" onclick="selectMode('change')">
+                    <span class="radio-dot"></span> Bi-Temporal Pair (Change Detection)
+                </div>
+                <div class="radio-option" id="opt-fusion" onclick="selectMode('fusion')">
+                    <span class="radio-dot"></span> Optical + SAR Pair (Cross-Modal Fusion)
                 </div>
 
-                <form id="queryForm" onsubmit="handleQuery(event)">
-                    <!-- Image T1 -->
-                    <div class="upload-area" onclick="document.getElementById('img1Input').click()">
-                        <div id="uploadText1">📷 Upload Primary Satellite Image (Time T1)</div>
-                        <input type="file" id="img1Input" class="file-input" accept="image/*" onchange="previewImage(this, 'img1Preview')">
-                        <img id="img1Preview" class="preview-img">
-                    </div>
+                <div style="margin-top: 1.5rem; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 1rem;">
+                    <label style="display: flex; align-items: center; gap: 0.6rem; font-weight: 700; cursor: pointer; color: #CCFF00; font-size: 0.9rem;">
+                        <input type="checkbox" id="demoCheckbox" onchange="toggleDemoMode()" style="accent-color: #CCFF00; width: 18px; height: 18px;">
+                        ⚡ Use Preset ISRO Demo Imagery Suite
+                    </label>
+                </div>
+            </div>
+        </div>
 
-                    <!-- Image T2 (Change Detection) -->
-                    <div id="t2Container" class="upload-area" style="display: none;" onclick="document.getElementById('img2Input').click()">
-                        <div id="uploadText2">⏱️ Upload Secondary Image (Time T2)</div>
-                        <input type="file" id="img2Input" class="file-input" accept="image/*" onchange="previewImage(this, 'img2Preview')">
-                        <img id="img2Preview" class="preview-img">
+        <!-- Main Content Area -->
+        <div class="main-content">
+            <!-- Hero Grid with 3D Globe -->
+            <div class="hero-grid">
+                <div>
+                    <div class="hero-subtitle">ISRO PROBLEM STATEMENT 167 -- REMOTE SENSING ASSISTANT</div>
+                    <h1 class="hero-title">SATQUERY AI: MULTI-TASK REMOTE SENSING VLM</h1>
+                    <p class="hero-desc">Agentic Vision-Language Model fine-tuned on Qwen2-VL-2B using QLoRA 4-bit quantization for satellite VQA, land-cover captioning, bi-temporal change detection, and optical-SAR fusion.</p>
+                    
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <h2>55,000+</h2>
+                            <p>REAL TRAINED SAMPLES</p>
+                        </div>
+                        <div class="stat-card">
+                            <h2>QWEN2-VL</h2>
+                            <p>2B-INSTRUCT BACKBONE</p>
+                        </div>
+                        <div class="stat-card">
+                            <h2>4-CROP</h2>
+                            <p>SPATIAL MULTI-TILES</p>
+                        </div>
                     </div>
-
-                    <!-- Query Box -->
-                    <div class="input-group">
-                        <label for="queryInput">Remote Sensing Query / Prompt:</label>
-                        <input type="text" id="queryInput" class="text-input" value="Is it a rural or an urban area?" placeholder="Ask a question or request land-cover analysis...">
-                    </div>
-
-                    <button type="submit" class="submit-btn">🚀 Execute SatQuery AI</button>
-                </form>
+                </div>
+                <!-- 3D Globe -->
+                <div id="globeViz"></div>
             </div>
 
-            <!-- Right Results Card -->
-            <div class="card">
-                <div class="card-header">📊 Agentic VLM Intelligence Output</div>
-                <div class="result-box">
-                    <div id="resultOutput" class="result-text">Select a task mode, upload a satellite image, and press 'Execute SatQuery AI' to generate real-time GIS analysis.</div>
-                    <div id="traceOutput"></div>
+            <!-- Ticker Banner -->
+            <div class="ticker-banner">
+                <div class="ticker-item">✦ ISRO SIH 167 PROTOCOL</div>
+                <div class="ticker-item">✦ RSVQA MULTI-SPECTRAL ENGINE</div>
+                <div class="ticker-item">✦ BI-TEMPORAL CHANGE DETECTION</div>
+                <div class="ticker-item">✦ OPTICAL-SAR FUSION</div>
+                <div class="ticker-item">✦ QLORA 4-BIT NEURAL WEIGHTS</div>
+            </div>
+
+            <!-- Workstation Panels Grid -->
+            <div class="workstation-grid" style="margin-top: 1.5rem;">
+                <!-- Intake Workstation -->
+                <div class="dark-panel">
+                    <h3>🖼️ Imagery Intake Workstation</h3>
+                    
+                    <!-- Slot 1 -->
+                    <div class="upload-dropzone" onclick="document.getElementById('fileInput1').click()">
+                        <div id="slot1Text">📷 Upload Satellite Image (TIFF/PNG/JPEG)</div>
+                        <input type="file" id="fileInput1" class="file-input" accept="image/*" onchange="previewImg(this, 'preview1')">
+                        <img id="preview1" class="preview-img">
+                    </div>
+
+                    <!-- Slot 2 -->
+                    <div id="slot2Container" class="upload-dropzone" style="display: none;" onclick="document.getElementById('fileInput2').click()">
+                        <div id="slot2Text">⏱️ Upload Secondary Image (Time T2 / SAR Radar)</div>
+                        <input type="file" id="fileInput2" class="file-input" accept="image/*" onchange="previewImg(this, 'preview2')">
+                        <img id="preview2" class="preview-img">
+                    </div>
+                </div>
+
+                <!-- Intelligence Command Console -->
+                <div class="dark-panel">
+                    <h3>💬 Intelligence Command Console</h3>
+                    <p style="color: #94A3B8; font-size: 0.85rem; margin-bottom: 0.8rem;"><b>Quick Query Presets:</b></p>
+
+                    <!-- Presets Grid -->
+                    <div class="preset-grid" id="presetsContainer">
+                        <button class="preset-btn" onclick="setPreset('How many houses are visible in this satellite area?')">🏠 Count Houses & Structures</button>
+                        <button class="preset-btn" onclick="setPreset('What is the building density, road layout, and spatial arrangement?')">🏙️ Urban Density & Roads</button>
+                        <button class="preset-btn" onclick="setPreset('Describe the land cover, terrain, and vegetation in detail.')">🌳 Land Cover Overview</button>
+                        <button class="preset-btn" onclick="setPreset('Identify any water bodies, bare soil, and environmental features.')">🌊 Water & Soil Features</button>
+                    </div>
+
+                    <div style="margin-bottom: 1rem;">
+                        <label style="display: block; font-weight: 700; font-size: 0.9rem; color: #CBD5E1; margin-bottom: 0.5rem;">Ask a question about the imagery:</label>
+                        <input type="text" id="queryInput" class="custom-input" value="How many houses are visible in this satellite area?">
+                    </div>
+
+                    <button class="action-btn" onclick="executeAnalysis()">🚀 EXECUTE SATELLITE ANALYSIS</button>
+
+                    <!-- Results Output Card -->
+                    <div class="report-card" id="reportCard" style="display: none;">
+                        <div id="resultStatus" style="color: #CCFF00; font-weight: 900; margin-bottom: 0.8rem; font-size: 1.1rem;"></div>
+                        <div id="reportText" class="report-text"></div>
+                        <div id="traceContainer" class="trace-box"></div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
+    <!-- 3D Globe Script -->
     <script>
         let currentMode = 'vqa';
 
-        function setMode(mode, evt) {
-            currentMode = mode;
-            document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('active'));
-            if (evt && evt.target) evt.target.classList.add('active');
+        // Initialize 3D Globe
+        const N = 12;
+        const arcsData = [...Array(N).keys()].map(() => ({
+            startLat: (Math.random() - 0.5) * 160,
+            startLng: (Math.random() - 0.5) * 360,
+            endLat: 20.59 + (Math.random() - 0.5) * 40,
+            endLng: 78.96 + (Math.random() - 0.5) * 40,
+            color: ['#CCFF00', '#00FFFF', '#FF007F'][Math.floor(Math.random() * 3)]
+        }));
 
-            const t2Box = document.getElementById('t2Container');
-            const qInput = document.getElementById('queryInput');
+        const globe = Globe()
+            (document.getElementById('globeViz'))
+            .globeImageUrl('//unpkg.com/three-globe/example/img/earth-night.jpg')
+            .bumpImageUrl('//unpkg.com/three-globe/example/img/earth-topology.png')
+            .backgroundImageUrl('//unpkg.com/three-globe/example/img/night-sky.png')
+            .arcsData(arcsData)
+            .arcColor('color')
+            .arcDashLength(0.4)
+            .arcDashGap(0.2)
+            .arcDashAnimateTime(1400)
+            .arcStroke(0.7);
+
+        globe.controls().autoRotate = true;
+        globe.controls().autoRotateSpeed = 1.3;
+        globe.pointOfView({ lat: 20.59, lng: 78.96, altitude: 2.1 });
+
+        function selectMode(mode) {
+            currentMode = mode;
+            document.querySelectorAll('.radio-option').forEach(el => el.classList.remove('selected'));
+            document.getElementById('opt-' + mode).classList.add('selected');
+
+            const s2 = document.getElementById('slot2Container');
+            const q = document.getElementById('queryInput');
+            const pBox = document.getElementById('presetsContainer');
 
             if (mode === 'vqa') {
-                t2Box.style.display = 'none';
-                qInput.value = 'Is it a rural or an urban area?';
-            } else if (mode === 'caption') {
-                t2Box.style.display = 'none';
-                qInput.value = 'Describe this satellite imagery in detail including land cover and visible structures.';
+                s2.style.display = 'none';
+                q.value = 'How many houses are visible in this satellite area?';
+                pBox.innerHTML = `
+                    <button class="preset-btn" onclick="setPreset('How many houses are visible in this satellite area?')">🏠 Count Houses & Structures</button>
+                    <button class="preset-btn" onclick="setPreset('What is the building density, road layout, and spatial arrangement?')">🏙️ Urban Density & Roads</button>
+                    <button class="preset-btn" onclick="setPreset('Describe the land cover, terrain, and vegetation in detail.')">🌳 Land Cover Overview</button>
+                    <button class="preset-btn" onclick="setPreset('Identify any water bodies, bare soil, and environmental features.')">🌊 Water & Soil Features</button>
+                `;
             } else if (mode === 'change') {
-                t2Box.style.display = 'block';
-                qInput.value = 'Analyze bi-temporal changes between Time T1 and Time T2 for this region.';
+                s2.style.display = 'block';
+                document.getElementById('slot1Text').innerText = '📷 Upload Image T1 (Earlier)';
+                document.getElementById('slot2Text').innerText = '⏱️ Upload Image T2 (Later)';
+                q.value = 'What structural changes and new construction occurred between T1 and T2?';
+                pBox.innerHTML = `
+                    <button class="preset-btn" onclick="setPreset('What structural changes and new construction occurred between T1 and T2?')">🏗️ Construction & Structural Shift</button>
+                    <button class="preset-btn" onclick="setPreset('Analyze vegetation growth, canopy loss, or land clearing between T1 and T2.')">🌲 Deforestation & Clearing</button>
+                    <button class="preset-btn" onclick="setPreset('Identify water body movement and surface terrain shifts between T1 and T2.')">🌊 Water & Terrain Delta</button>
+                    <button class="preset-btn" onclick="setPreset('Provide a complete quantified bi-temporal delta report between T1 and T2.')">📊 Complete Change Audit</button>
+                `;
+            } else if (mode === 'fusion') {
+                s2.style.display = 'block';
+                document.getElementById('slot1Text').innerText = '📷 Upload Optical Image';
+                document.getElementById('slot2Text').innerText = '📡 Upload SAR (Radar) Image';
+                q.value = 'Analyze combined Optical and SAR radar backscatter evidence.';
+                pBox.innerHTML = `
+                    <button class="preset-btn" onclick="setPreset('Analyze combined Optical and SAR radar backscatter evidence.')">📡 Optical vs SAR Fusion</button>
+                    <button class="preset-btn" onclick="setPreset('Detect building backscatter in SAR vs Optical color.')">🏢 Structural Radar Roughness</button>
+                    <button class="preset-btn" onclick="setPreset('Synthesize all-weather SAR radar with Optical spectral land-cover.')">☁️ Cloud-Penetrating All-Weather</button>
+                    <button class="preset-btn" onclick="setPreset('Cross-verify surface water boundaries across Optical and SAR sensors.')">🌊 Water Boundary Synthesis</button>
+                `;
             }
         }
 
-        function previewImage(input, previewId) {
+        function setPreset(txt) {
+            document.getElementById('queryInput').value = txt;
+        }
+
+        function previewImg(input, pId) {
             if (input.files && input.files[0]) {
                 const reader = new FileReader();
-                reader.onload = function(e) {
-                    const img = document.getElementById(previewId);
+                reader.onload = e => {
+                    const img = document.getElementById(pId);
                     img.src = e.target.result;
                     img.style.display = 'block';
                 }
@@ -189,34 +361,50 @@
             }
         }
 
-        async function handleQuery(e) {
-            e.preventDefault();
-            const outBox = document.getElementById('resultOutput');
-            const traceBox = document.getElementById('traceOutput');
-            outBox.innerHTML = '⏳ <b>Running Agentic Routing & Specialist VLM Inference...</b>';
-            traceBox.innerHTML = '';
+        function toggleDemoMode() {
+            const isDemo = document.getElementById('demoCheckbox').checked;
+            if (isDemo) {
+                document.getElementById('preview1').src = 'https://images.unsplash.com/photo-1526778548025-fa2f459cd5c1?q=80&w=400';
+                document.getElementById('preview1').style.display = 'block';
+                if (currentMode !== 'vqa') {
+                    document.getElementById('preview2').src = 'https://images.unsplash.com/photo-1500382017468-9049fed747ef?q=80&w=400';
+                    document.getElementById('preview2').style.display = 'block';
+                }
+            }
+        }
 
-            const qText = document.getElementById('queryInput').value;
+        async function executeAnalysis() {
+            const q = document.getElementById('queryInput').value;
+            const rCard = document.getElementById('reportCard');
+            const rStatus = document.getElementById('resultStatus');
+            const rText = document.getElementById('reportText');
+            const rTrace = document.getElementById('traceContainer');
+
+            rCard.style.display = 'block';
+            rStatus.innerHTML = '⏳ <i>Agentic orchestrator running 4x multi-crop spatial inspection...</i>';
+            rText.innerText = '';
+            rTrace.innerHTML = '';
 
             try {
                 const res = await fetch('/api/query', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ query: qText, task_mode: currentMode })
+                    body: JSON.stringify({ query: q, task_mode: currentMode })
                 });
                 const data = await res.json();
 
-                outBox.innerHTML = `<h3>Analysis Report [Category: ${(data.task || currentMode).toUpperCase()}]</h3>\n<p>${data.answer}</p>\n\n<p style="color: #CCFF00; margin-top: 1.2rem;"><b>Confidence:</b> ${(data.confidence * 100).toFixed(1)}% | <b>Execution Time:</b> ${data.execution_time_sec}s</p>`;
-                
+                rStatus.innerHTML = `✅ ANALYSIS COMPLETE: ${(data.task || currentMode).toUpperCase()} (Confidence: ${(data.confidence * 100).toFixed(0)}%)`;
+                rText.innerHTML = `<h3>📝 Detailed ISRO Intelligence Report</h3>\n<br>${data.answer}`;
+
                 if (data.execution_trace) {
-                    let traceHtml = '<h4 style="color: #CCFF00; margin-top: 1.2rem;">🔍 Execution Audit Trace (PS 167 Log):</h4>';
+                    let traceHtml = '<h4>📋 Auditable Agentic Trace Log (PS 167 Requirement)</h4>';
                     data.execution_trace.forEach(t => {
-                        traceHtml += `<div class="trace-item"><b>Step ${t.step} [${t.action}]</b>: ${t.detail}</div>`;
+                        traceHtml += `<div class="trace-step"><b>Step ${t.step} - ${t.action}</b>: ${t.detail}</div>`;
                     });
-                    traceBox.innerHTML = traceHtml;
+                    rTrace.innerHTML = traceHtml;
                 }
             } catch (err) {
-                outBox.innerHTML = '❌ Error executing query. Please try again.';
+                rStatus.innerHTML = '❌ Error executing analysis.';
             }
         }
     </script>
